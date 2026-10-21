@@ -1,0 +1,334 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>NBA Yahoo Fantasy 14-Cat 戰情室 (11先發/3板凳)</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+</head>
+<body class="bg-slate-900 text-slate-100 min-h-screen">
+
+  <div class="max-w-5xl mx-auto px-4 py-6">
+    <!-- Header -->
+    <header class="flex flex-col sm:flex-row justify-between items-start sm:items-center pb-5 mb-6 border-b border-slate-800 gap-4">
+      <div>
+        <h1 class="text-2xl font-black text-amber-400 tracking-wide">🏀 NBA YAHOO FANTASY 戰情中心</h1>
+        <p class="text-xs text-slate-400 mt-1">2026-2027 球季 · 美國時間 Mon-Sun · 11 先發 / 3 板凳 · 專屬 14-Cat 賽制對抗分析</p>
+      </div>
+      <button id="toggleConfigBtn" class="text-xs bg-slate-800 hover:bg-slate-700 text-slate-300 px-3 py-1.5 rounded-lg border border-slate-700">
+        ⚙️ 聯盟設定 / 編輯玩家與名單
+      </button>
+    </header>
+
+    <!-- 設定面板 (預設收合) -->
+    <section id="configSection" class="hidden bg-slate-800/90 rounded-2xl p-5 mb-6 border border-slate-700 space-y-4">
+      <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+        <div>
+          <label class="block text-xs font-semibold text-slate-300 mb-1">Gemini API Key</label>
+          <input type="password" id="apiKey" placeholder="貼上你的 Gemini API Key" class="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-xs text-white">
+        </div>
+        <div>
+          <label class="block text-xs font-semibold text-slate-300 mb-1">1. 選擇要編輯的隊伍</label>
+          <select id="editTeamSelect" class="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-xs text-white"></select>
+        </div>
+        <div>
+          <label class="block text-xs font-semibold text-amber-300 mb-1">2. 自訂該隊玩家名稱</label>
+          <input type="text" id="teamNameInput" placeholder="例如：翰林聯誼會、羅老'S RAD TEAM..." class="w-full bg-slate-900 border border-amber-500/60 rounded-lg px-3 py-2 text-xs text-white focus:outline-none focus:ring-1 focus:ring-amber-400">
+        </div>
+      </div>
+
+      <div>
+        <div class="flex justify-between items-center mb-1">
+          <label class="block text-xs font-semibold text-slate-300">3. 該隊 14 人名單（格式：球員英文全名 - 球隊簡寫，每行一人）</label>
+          <button id="saveRosterBtn" class="text-xs bg-amber-500 hover:bg-amber-600 text-slate-950 font-bold px-4 py-1.5 rounded-lg transition-colors">
+            💾 儲存隊伍名稱與名單
+          </button>
+        </div>
+        <textarea id="rosterInput" rows="7" placeholder="例如：&#10;Fred VanVleet - HOU&#10;Anthony Edwards - MIN&#10;Kyrie Irving - DAL&#10;Brandon Miller - CHA&#10;Deni Avdija - POR&#10;Dyson Daniels - ATL&#10;Zach Edey - MEM&#10;Isaiah Hartenstein - OKC&#10;Damian Lillard - POR&#10;CJ McCollum - ATL&#10;Darius Acuff Jr. - SAC" class="w-full bg-slate-900 border border-slate-700 rounded-lg p-2.5 text-xs font-mono text-slate-200"></textarea>
+      </div>
+    </section>
+
+    <!-- 當週對戰控制面板 -->
+    <section class="bg-slate-800 rounded-2xl p-5 mb-6 border border-slate-700 shadow-lg">
+      <div class="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-4">
+        <div class="bg-slate-900/80 p-3.5 rounded-xl border border-slate-700/60">
+          <span class="text-[11px] uppercase tracking-wider text-emerald-400 font-bold">我的隊伍 (My Team)</span>
+          <select id="myTeamSelect" class="w-full mt-1.5 bg-slate-800 border border-slate-600 rounded-lg px-3 py-2 text-sm font-semibold text-white"></select>
+        </div>
+        <div class="bg-slate-900/80 p-3.5 rounded-xl border border-slate-700/60">
+          <span class="text-[11px] uppercase tracking-wider text-rose-400 font-bold">本週對手 (Opponent)</span>
+          <select id="oppTeamSelect" class="w-full mt-1.5 bg-slate-800 border border-slate-600 rounded-lg px-3 py-2 text-sm font-semibold text-white"></select>
+        </div>
+      </div>
+
+      <div class="flex flex-col sm:flex-row justify-between items-center gap-3 pt-2">
+        <div class="text-xs text-slate-400">
+          <span>對齊設定：美東時間 (EST) 週一至週日 · 11 先發上限 (3 板凳) · 14-Cat 比項評估</span>
+        </div>
+        <button id="runAnalysisBtn" class="w-full sm:w-auto px-6 py-2.5 bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-600 hover:to-amber-700 text-slate-950 font-black text-sm rounded-xl shadow-md transition-all">
+          🚀 產出 11人制排程矩陣與 14-Cat 勝率分析
+        </button>
+      </div>
+    </section>
+
+    <!-- 載入與錯誤狀態 -->
+    <div id="loading" class="hidden text-center py-12">
+      <div class="inline-block animate-spin rounded-full h-9 w-9 border-4 border-amber-400 border-t-transparent"></div>
+      <p id="loadingMsg" class="mt-3 text-sm text-slate-300 font-medium">連線 Google 檢索雙方 28 位球員最新賽程與傷病動態中...</p>
+    </div>
+    <div id="errorBox" class="hidden p-4 mb-6 bg-red-950/80 border border-red-700 text-red-200 text-xs rounded-xl"></div>
+
+    <!-- 分析結果區域 -->
+    <main id="resultSection" class="hidden space-y-6">
+      <div class="bg-slate-800 rounded-2xl border border-slate-700 p-6 shadow-xl overflow-x-auto">
+        <div class="flex justify-between items-center border-b border-slate-700 pb-3 mb-4">
+          <h2 class="text-base font-bold text-amber-400">📊 當週 Yahoo Fantasy 11人制賽程矩陣與 14-Cat 決策</h2>
+          <span id="analysisTime" class="text-[11px] text-slate-400"></span>
+        </div>
+        <div id="reportContent" class="prose prose-invert max-w-none text-sm leading-relaxed space-y-4"></div>
+      </div>
+
+      <div id="sourcesBox" class="bg-slate-800/60 rounded-xl border border-slate-700/60 p-4 text-xs">
+        <h3 class="font-bold text-slate-300 mb-2">🔗 即時引據來源</h3>
+        <ul id="sourcesList" class="space-y-1 text-sky-400"></ul>
+      </div>
+    </main>
+  </div>
+
+  <script>
+    const DEFAULT_TEAMS = Array.from({ length: 10 }, (_, i) => ({
+      id: `team_${i + 1}`,
+      name: i === 0 ? "My Team (我)" : `Player ${i + 1}`,
+      roster: []
+    }));
+
+    let leagueData = JSON.parse(localStorage.getItem('NBA_FANTASY_LEAGUE')) || DEFAULT_TEAMS;
+
+    const apiKeyInput = document.getElementById('apiKey');
+    const toggleConfigBtn = document.getElementById('toggleConfigBtn');
+    const configSection = document.getElementById('configSection');
+    const editTeamSelect = document.getElementById('editTeamSelect');
+    const teamNameInput = document.getElementById('teamNameInput');
+    const rosterInput = document.getElementById('rosterInput');
+    const saveRosterBtn = document.getElementById('saveRosterBtn');
+    const myTeamSelect = document.getElementById('myTeamSelect');
+    const oppTeamSelect = document.getElementById('oppTeamSelect');
+    const runAnalysisBtn = document.getElementById('runAnalysisBtn');
+    const loading = document.getElementById('loading');
+    const loadingMsg = document.getElementById('loadingMsg');
+    const errorBox = document.getElementById('errorBox');
+    const resultSection = document.getElementById('resultSection');
+    const reportContent = document.getElementById('reportContent');
+    const analysisTime = document.getElementById('analysisTime');
+    const sourcesBox = document.getElementById('sourcesBox');
+    const sourcesList = document.getElementById('sourcesList');
+
+    apiKeyInput.value = localStorage.getItem('GEMINI_API_KEY') || '';
+    apiKeyInput.addEventListener('input', (e) => localStorage.setItem('GEMINI_API_KEY', e.target.value.trim()));
+
+    toggleConfigBtn.addEventListener('click', () => configSection.classList.toggle('hidden'));
+
+    function renderDropdowns() {
+      const prevEdit = editTeamSelect.value;
+      const prevMy = myTeamSelect.value;
+      const prevOpp = oppTeamSelect.value;
+
+      editTeamSelect.innerHTML = '';
+      myTeamSelect.innerHTML = '';
+      oppTeamSelect.innerHTML = '';
+
+      leagueData.forEach((team) => {
+        const count = team.roster.length;
+        const optText = `${team.name} (${count}/14 人)`;
+        editTeamSelect.add(new Option(optText, team.id));
+        myTeamSelect.add(new Option(optText, team.id));
+        oppTeamSelect.add(new Option(optText, team.id));
+      });
+
+      if (prevEdit) editTeamSelect.value = prevEdit;
+      if (prevMy) myTeamSelect.value = prevMy;
+      if (prevOpp) {
+        oppTeamSelect.value = prevOpp;
+      } else if (oppTeamSelect.options.length > 1) {
+        oppTeamSelect.selectedIndex = 1;
+      }
+
+      loadTeamToEditor();
+    }
+
+    function loadTeamToEditor() {
+      const selectedId = editTeamSelect.value;
+      const team = leagueData.find(t => t.id === selectedId);
+      if (team) {
+        teamNameInput.value = team.name;
+        rosterInput.value = team.roster.join('\n');
+      }
+    }
+
+    editTeamSelect.addEventListener('change', loadTeamToEditor);
+
+    saveRosterBtn.addEventListener('click', () => {
+      const selectedId = editTeamSelect.value;
+      const team = leagueData.find(t => t.id === selectedId);
+      const newName = teamNameInput.value.trim();
+
+      if (!newName) {
+        alert("隊伍名稱不能為空白！");
+        return;
+      }
+
+      if (team) {
+        team.name = newName;
+        team.roster = rosterInput.value.split('\n').map(s => s.trim()).filter(Boolean);
+        localStorage.setItem('NBA_FANTASY_LEAGUE', JSON.stringify(leagueData));
+        renderDropdowns();
+        alert(`已成功儲存！\n隊伍名稱：${team.name}\n球員數量：${team.roster.length} 位`);
+      }
+    });
+
+    renderDropdowns();
+
+    runAnalysisBtn.addEventListener('click', async () => {
+      const key = apiKeyInput.value.trim();
+      if (!key) {
+        showError("請先於設定中輸入你的 Gemini API Key！");
+        return;
+      }
+
+      const myTeam = leagueData.find(t => t.id === myTeamSelect.value);
+      const oppTeam = leagueData.find(t => t.id === oppTeamSelect.value);
+
+      if (!myTeam || myTeam.roster.length === 0 || !oppTeam || oppTeam.roster.length === 0) {
+        showError("雙方隊伍名單不能為空，請先在設定中輸入 14 人名單！");
+        return;
+      }
+
+      errorBox.classList.add('hidden');
+      loading.classList.remove('hidden');
+      resultSection.classList.add('hidden');
+      runAnalysisBtn.disabled = true;
+
+      try {
+        const now = new Date();
+        const year = now.getFullYear();
+        const month = String(now.getMonth() + 1).padStart(2, '0');
+        const day = String(now.getDate()).padStart(2, '0');
+        const todayStr = `${year}-${month}-${day}`;
+
+        loadingMsg.innerText = `正在連線 Google 檢索雙方 28 位球員的美東時間賽程與最新傷病 (${todayStr})...`;
+
+        const prompt = `
+你是一位精通 Yahoo Fantasy Basketball (H2H 類別對抗) 的頂級數據分析與排陣教練。
+【目前基準日期】：今天是 ${todayStr}（2026-2027 球季）。
+【時間與賽程標準】：必須嚴格以「美東時間 (EST) 週一至週日 (Monday ~ Sunday)」為準，符合 Yahoo Fantasy 週對戰時區。
+【過濾規則】：傷病情報嚴格以近兩週最新消息為準，過期舊聞一律忽略。
+
+【聯盟真實規則與 14-Cat 比項設定】：
+1. 陣容設定：每隊 14 人。每天先發位置上限為 11 人（PG, SG, G, SF, PF, F, C, C, UTIL, UTIL, UTIL），剩餘 3 人放板凳（Bench），不計入當日數據。
+2. 對抗數據項目 (共 14 項)：
+   - 投射項：FGM, FGA, FG%, FTM, FTA, FT%, 3PTM, 3PTA, 3PT%
+   - 計分與防守項：PTS, OREB, DREB, AST, ST, BLK, TO (失誤，越低越好), A/T (助攻失誤比)
+
+【我方隊伍】：${myTeam.name}
+【我方 14 人名單】：
+${myTeam.roster.join('\n')}
+
+【本週對手】：${oppTeam.name}
+【對手 14 人名單】：
+${oppTeam.roster.join('\n')}
+
+---
+請產出結構化排陣與對戰勝率分析報告：
+
+### 一、 🚑【2026-27 最新傷病與即時出賽狀態監測】
+- 逐一列出雙方被標註為 Out / Questionable / GTD 的球員最新進度。
+- 提醒我方今天/本週哪些傷兵「切勿擺進 11 人先發席位」，直接放板凳或 IL。
+
+### 二、 📅【${myTeam.name}（我方）11人先發/3板凳 賽程矩陣表格】
+以美東時間週一到週日呈現 14 人比賽安排：
+| 球員名稱 | 所屬隊伍 | 週一(Mon) | 週二(Tue) | 週三(Wed) | 週四(Thu) | 週五(Fri) | 週六(Sat) | 週日(Sun) | 個人總場次 | 傷病/調度備註 |
+（註：有比賽請填寫 "✓" 或對手如 "@BOS"，無比賽填 "-"）
+
+表格末端請統整 3 行統計列：
+1. **每日預計出賽球員數 (人)**：全隊當天有比賽的總人數（0~14）。
+2. **每日實際可計數據人數 (人，上限 11 人)**：若超過 11 人請標註 "11 (爆滿!)"。
+3. **每日須移至板凳 (Bench) 人數 (人)**：有比賽但因為先發位置爆滿（>11人）必須犧牲的人數。
+
+在表格下方列出：
+- **同隊伍場次合併加總**：統計相同 NBA 球隊所貢獻的總人次（例：ATL (2人) × 4場 = 8 人次）。
+- **我方本週最大有效總場次**：計算週一至週日「每日實際可計數據人數」的加總（上限為 77 場）。
+
+### 三、 📅【${oppTeam.name}（對手）11人先發/3板凳 賽程矩陣表格】
+依照上述完全相同的格式，呈現對手的 14 人矩陣表格、同隊加總與對手本週最大有效總場次。
+
+### 四、 ⚔️【14-Cat 勝負預測與 3 人板凳取捨策略】
+1. **有效出場人次對比**：我方有效場次 vs 對手有效場次，總差距是多少場？
+2. **爆滿日 (Heavy Days) 的 3 人板凳選拔建議**：
+   - 針對超過 11 人出賽的爆滿日，我方應將哪 3 位球員放板凳？
+   - 提示：如何依照 14-Cat（例如保住 FG%/FT%/A/T 命中率，或追求 PTS/REB/3PTM/ST 累積量）來取捨先發？
+3. **少賽日 (Quality Days) 優勢**：指出雙方哪幾天人數 <= 11人，所有人皆可直接先發吃滿數據。
+4. **14 項數據預期勝負**：評估在雙方有效場次與陣容特性下，我方有望在哪些項目取勝（目標拿下至少 8 個項目勝出）。
+
+請以繁體中文與清晰、工整的 Markdown 格式呈現。
+`;
+
+        const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/gemini-3.5-flash-lite:generateContent?key=${key}`;
+
+        const response = await fetch(endpoint, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            contents: [{ parts: [{ text: prompt }] }],
+            tools: [{ googleSearch: {} }],
+            generationConfig: { temperature: 0.1 }
+          })
+        });
+
+        const data = await response.json();
+        if (!response.ok) throw new Error(data.error?.message || "API 請求失敗，請確認 Key 是否有效。");
+
+        const candidate = data.candidates?.[0];
+        const text = candidate?.content?.parts?.[0]?.text;
+        if (!text) throw new Error("未取得分析內容，請確認名單後重試。");
+
+        reportContent.innerHTML = marked.parse(text);
+        analysisTime.innerText = `最後更新：${new Date().toLocaleTimeString('zh-TW', { hour: '2-digit', minute: '2-digit' })}`;
+
+        sourcesList.innerHTML = '';
+        const chunks = candidate.groundingMetadata?.groundingChunks;
+        if (chunks && chunks.length > 0) {
+          chunks.forEach(chunk => {
+            if (chunk.web?.uri) {
+              const li = document.createElement('li');
+              li.innerHTML = `<a href="${chunk.web.uri}" target="_blank" class="hover:underline">• ${escapeHtml(chunk.web.title || chunk.web.uri)}</a>`;
+              sourcesList.appendChild(li);
+            }
+          });
+          sourcesBox.classList.remove('hidden');
+        } else {
+          sourcesBox.classList.add('hidden');
+        }
+
+        resultSection.classList.remove('hidden');
+      } catch (err) {
+        showError(`分析發生錯誤：${err.message}`);
+      } finally {
+        loading.classList.add('hidden');
+        runAnalysisBtn.disabled = false;
+      }
+    });
+
+    function showError(msg) {
+      errorBox.innerText = msg;
+      errorBox.classList.remove('hidden');
+    }
+
+    function escapeHtml(string) {
+      const div = document.createElement('div');
+      div.innerText = string;
+      return div.innerHTML;
+    }
+  </script>
+</body>
+</html>
